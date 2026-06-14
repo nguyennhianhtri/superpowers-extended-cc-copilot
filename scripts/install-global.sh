@@ -67,6 +67,14 @@ PY
   cur_h="$(git config --global --get core.hooksPath || true)"
   [[ "$cur_h" == "$SP_HOME/git-hooks" ]] && git config --global --unset core.hooksPath && echo "Unset core.hooksPath."
   rm -rf "$SP_HOME"
+  # Remove the skill symlinks we created (only links that point into this clone).
+  if [[ -d "$HOME/.copilot/skills" ]]; then
+    for l in "$HOME"/.copilot/skills/*; do
+      [[ -L "$l" ]] || continue
+      tgt="$(readlink "$l")"
+      case "$tgt" in "$PLUGIN_ROOT"/skills/*) rm -f "$l"; echo "Unlinked skill $(basename "$l").";; esac
+    done
+  fi
   echo "Uninstalled. (Per-repo .git/hooks installed earlier by init-superpowers.sh are left alone.)"
   exit 0
 fi
@@ -75,6 +83,23 @@ if [[ ! -f "$SRC_HOOK" ]]; then
   echo "Error: $SRC_HOOK not found. Run from your clone of the plugin." >&2
   exit 1
 fi
+
+# ---------------------------------------------------------------------------
+# 0. Make the skills discoverable: symlink them into ~/.copilot/skills/.
+#    Copilot CLI auto-discovers every <name>/SKILL.md under ~/.copilot/skills
+#    (this is also where marketplace-installed plugins land their skills).
+# ---------------------------------------------------------------------------
+SKILLS_DST="$HOME/.copilot/skills"
+mkdir -p "$SKILLS_DST"
+linked=0
+for d in "$PLUGIN_ROOT"/skills/*/; do
+  n="$(basename "$d")"
+  [[ "$n" == "shared" ]] && continue          # shared/ is a reference dir, not a skill
+  [[ -f "$d/SKILL.md" ]] || continue
+  ln -sfn "$d" "$SKILLS_DST/$n"
+  linked=$((linked + 1))
+done
+echo "Linked $linked skills into $SKILLS_DST (auto-discovered by Copilot CLI)."
 
 # ---------------------------------------------------------------------------
 # 1. Global skills discipline -> copilot-instructions.md
@@ -159,12 +184,13 @@ fi
 cat <<EOF
 
 Done. Summary:
+  • Skills: 16 linked into ~/.copilot/skills (auto-discovered every session).
   • Skills discipline injected globally via $INSTR (every Copilot CLI session).
-  • Plugin skills: ensure installed once per machine ->
-      copilot plugin install nguyennhianhtri/superpowers-extended-cc-copilot
   • Commit gate: new repos/clones get it automatically via init.templateDir.$([[ "$MODE" == "--all-repos" ]] && echo "
     ALL repos gated via core.hooksPath.")
   • Existing repos: run scripts/init-superpowers.sh inside them (or re-run with --all-repos).
 
+Note: skill symlinks point into this clone ($PLUGIN_ROOT). Keep it in place, or
+install via Copilot's marketplace UI (/plugin) for a self-contained copy.
 Undo everything: scripts/install-global.sh --uninstall
 EOF
