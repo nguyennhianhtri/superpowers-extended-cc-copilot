@@ -19,14 +19,48 @@ own primitives.
 > runtime yet** — so they are re-expressed as *skill discipline* + a per-repo
 > `AGENTS.md` bootstrap. See [Feature parity](#feature-parity).
 
-## Install
+## Quick start
 
 ```bash
+# 1. Install the plugin (once per machine). Skills then auto-load in EVERY project.
+copilot plugin install nguyennhianhtri/superpowers-extended-cc-copilot
+#    …or from a local clone:
+copilot plugin install /path/to/superpowers-extended-cc-copilot
+
+# 2. Verify
+copilot plugin list
+
+# 3. (Optional, per repo) auto-load the "check for a skill first" discipline.
+#    Run the init script from your clone of this repo:
+cd /path/to/your/project
+/path/to/superpowers-extended-cc-copilot/scripts/init-superpowers.sh
+```
+
+Plugins install at the **user level**, so there is no per-project install — once
+installed, the skills are available everywhere. The only per-project step is the
+optional `AGENTS.md` bootstrap in step 3, which makes the session-start discipline
+auto-load in that repo (needed because Copilot CLI doesn't fire plugin hooks yet —
+see [Feature parity](#feature-parity)).
+
+> **Visibility:** while this repo is **private**, only accounts you've granted read
+> access can `copilot plugin install` it. Make it **public** and anyone can install it
+> with `copilot plugin install nguyennhianhtri/superpowers-extended-cc-copilot` — no
+> special access required.
+
+## Install (details)
+
+```bash
+# From GitHub
+copilot plugin install nguyennhianhtri/superpowers-extended-cc-copilot
+
 # From a local clone
 copilot plugin install /path/to/superpowers-extended-cc-copilot
 
 # Verify
 copilot plugin list
+
+# Update later (after pushing changes)
+copilot plugin install nguyennhianhtri/superpowers-extended-cc-copilot
 ```
 
 Then, in each repo where you want the discipline auto-loaded at session start:
