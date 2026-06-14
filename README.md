@@ -72,9 +72,43 @@ Then, in each repo where you want the discipline auto-loaded at session start:
 /path/to/superpowers-extended-cc-copilot/scripts/init-superpowers.sh
 ```
 
-This writes a small sentinel-delimited block into the repo's `AGENTS.md` (the only
-instructions surface Copilot CLI auto-injects today). It's idempotent and preserves
-the rest of your `AGENTS.md`.
+This writes a sentinel-delimited block into the repo's `AGENTS.md` and installs the
+git pre-commit task gate into `.git/hooks/`. It's idempotent and preserves the rest of
+your `AGENTS.md` and any existing pre-commit hook.
+
+## Automate for ALL repos (global, one-time)
+
+If you don't want to run `init-superpowers.sh` in every repo, set it up once globally:
+
+```bash
+# Discipline for every session + the commit gate for every NEW repo/clone
+/path/to/superpowers-extended-cc-copilot/scripts/install-global.sh
+
+# Same, but ALSO gate every EXISTING repo (via git core.hooksPath)
+/path/to/superpowers-extended-cc-copilot/scripts/install-global.sh --all-repos
+
+# Undo everything it set up
+/path/to/superpowers-extended-cc-copilot/scripts/install-global.sh --uninstall
+```
+
+What it does (idempotent, preserves your existing content/config):
+
+1. **Skills discipline, everywhere.** Writes a managed block into
+   **`~/.copilot/copilot-instructions.md`** — a global file whose content Copilot CLI
+   injects into *every* session in *every* directory (verified against CLI build
+   `0.0.367`). No per-repo `AGENTS.md` needed.
+2. **Commit gate for new repos.** Sets git **`init.templateDir`** to a template
+   containing the `pre-commit` gate, so every `git init` and `git clone` gets it
+   automatically. Existing per-repo hooks are left untouched. (If you already use a
+   template dir, the gate is added to it instead of overriding.)
+3. **`--all-repos`** additionally sets git **`core.hooksPath`** so existing repos are
+   gated too. Caveat: `core.hooksPath` overrides each repo's `.git/hooks`, so if you
+   rely on other per-repo hooks, prefer the default mode and run `init-superpowers.sh`
+   in those repos instead.
+
+The plugin itself still installs once per machine (`copilot plugin install …`); that
+makes the skills globally available. The global script covers the two per-repo pieces
+(discipline + gate) so new projects need zero manual setup.
 
 ## Skills
 
