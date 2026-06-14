@@ -1,0 +1,25 @@
+{
+  "name": "superpowers-extended-cc-copilot",
+  "description": "Copilot CLI port of pcvelz/superpowers-extended-cc: a disciplined workflow skill collection (brainstorming, planning, TDD, debugging, code review, verification) with native task management mapped onto Copilot CLI's sql todos + todo_deps, plus the Extended-CC user-gate flow.",
+  "version": "6.0.3-copilot.1",
+  "author": {
+    "name": "Ported for GitHub Copilot CLI",
+    "email": "noreply@example.com"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/pcvelz/superpowers",
+  "keywords": [
+    "workflow",
+    "tdd",
+    "debugging",
+    "brainstorming",
+    "planning",
+    "code-review",
+    "native-tasks",
+    "user-gates",
+    "superpowers",
+    "copilot-cli"
+  ],
+  "category": "workflow",
+  "skills": "skills/"
+}
