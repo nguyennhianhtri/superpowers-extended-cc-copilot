@@ -157,11 +157,13 @@ next session.
 ## User-gate metadata
 
 `userGate: true` and `tags: ["user-gate"]` go in the `json:metadata` fence in
-`description`, identical to upstream. Because Copilot CLI hooks do not fire at
-runtime yet (see README → Feature parity), the gate is enforced by **discipline**:
-the `checking-gates` skill must run before any task carrying that flag is marked
-`done`. To make detection reliable, **always serialize the flag exactly as**
-`"userGate": true` (one space after the colon — the canonical form everywhere in this
+`description`, identical to upstream. Copilot CLI hooks fire but can't `deny` a tool in
+the current build (see README → "About Copilot CLI hooks"), so the gate is enforced by
+**discipline**: the `checking-gates` skill must run before any task carrying that flag
+is marked `done`. (Commits are separately blocked by the git `pre-commit` task gate
+while any task is unfinished.) To make detection reliable, **always serialize the flag
+exactly as** `"userGate": true` (one space after the colon — the canonical form
+everywhere in this
 port). Detect open gates with:
 
 ```sql

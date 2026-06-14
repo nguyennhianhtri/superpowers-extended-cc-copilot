@@ -1,0 +1,56 @@
+#!/bin/bash
+# superpowers-extended-cc-copilot — pre-commit task gate (real git hook).
+#
+# Installed by scripts/init-superpowers.sh into <repo>/.git/hooks/pre-commit.
+# Git runs this before creating a commit. If any task in a *.tasks.json file under
+# the repo is not done/cancelled, the commit is BLOCKED. This is the Copilot CLI
+# equivalent of upstream's pre-commit task gate — and because git enforces it, it
+# works no matter how the commit is invoked (agent, terminal, IDE).
+#
+# Bypass: `git commit --no-verify`, or `SUPERPOWERS_SKIP_GATE=1 git commit`.
+# Disable: delete this file, or re-run init-superpowers.sh after removing the block.
+#
+# Requires: bash, python3.
+
+set -euo pipefail
+
+if [[ "${SUPERPOWERS_SKIP_GATE:-}" == "1" ]]; then
+  exit 0
+fi
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+REPORT="$(python3 - "$ROOT" <<'PY'
+import sys, os, glob, json
+root = sys.argv[1]
+DONE = {"completed", "done", "cancelled", "canceled", "skipped"}
+open_tasks = []
+for f in glob.glob(os.path.join(root, "**", "*.tasks.json"), recursive=True):
+    try:
+        data = json.load(open(f, encoding="utf-8"))
+    except Exception:
+        continue
+    tasks = data.get("tasks", []) if isinstance(data, dict) else []
+    for t in tasks:
+        if not isinstance(t, dict):
+            continue
+        status = str(t.get("status", "")).strip().lower()
+        if status not in DONE:
+            rel = os.path.relpath(f, root)
+            open_tasks.append((rel, t.get("id"), str(t.get("subject", "")), status or "pending"))
+for f, i, sub, s in open_tasks[:30]:
+    print("  - [%s] task %s (%s): %s" % (f, i, s, sub))
+PY
+)"
+
+if [[ -n "$REPORT" ]]; then
+  echo "✗ superpowers pre-commit task gate: unfinished tasks remain." >&2
+  echo "" >&2
+  echo "$REPORT" >&2
+  echo "" >&2
+  echo "Finish or cancel them (run the verification-before-completion skill), then" >&2
+  echo "commit again. To bypass once: git commit --no-verify" >&2
+  exit 1
+fi
+
+exit 0

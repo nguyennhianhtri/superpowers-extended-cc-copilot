@@ -203,8 +203,9 @@ Suppress entirely if no user-gate tasks were tagged. Do NOT turn this into an
 
 On Claude Code this section scanned `settings.local.json` + `settings.json` +
 `~/.claude/settings.json` for the `post-task-complete-revalidate.sh` hook and
-suppressed the heads-up when present. Copilot CLI does not execute those hooks, so
-the scan is omitted.
+suppressed the heads-up when present. Copilot CLI doesn't read `.claude/settings.json`,
+and its own hooks can't veto a task close in the current build, so the scan is omitted
+and the gate is enforced by the `checking-gates` discipline instead.
 
 </details>
 

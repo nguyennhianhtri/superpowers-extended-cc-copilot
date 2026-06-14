@@ -10,20 +10,22 @@ question at a time), then immediately write the chosen configuration.
 ## Important platform note — read this to the user first
 
 The upstream Claude Code fork enforces these flows with **hooks** registered in
-`.claude/settings.json`. **Copilot CLI does not execute plugin hooks at runtime
-yet** (verified empirically — see README → Feature parity). So on Copilot CLI these
-flows are enforced by **skill discipline**, not by an automatic hook:
+`.claude/settings.json`. Copilot CLI *does* run lifecycle hooks, but in the current
+build (0.0.367) it doesn't honor a hook's `additionalContext` or `deny` outputs (see
+README → "About Copilot CLI hooks"). So this port enforces the flows with the surfaces
+that work today:
 
+- **Pre-commit task gate** — a real **git `pre-commit` hook** (installed by
+  `scripts/init-superpowers.sh`) blocks `git commit` while any `.tasks.json` has
+  unfinished tasks. This is automatic and bulletproof; bypass with
+  `git commit --no-verify`.
 - **User-gate enforcement** — the `checking-gates` / `specifying-gates` skills must
-  be invoked before any task carrying `"userGate": true` is marked `done`. There is
-  no hook to register; the discipline lives in the skills and in your `AGENTS.md`
-  bootstrap.
-- **Pre-commit task gate** — there is no commit-blocking hook. Instead, before you
-  `git commit`, run the open-task check and refuse if work is unfinished:
-  `SELECT id,title,status FROM todos WHERE status NOT IN ('done');`
+  be invoked before any task carrying `"userGate": true` is marked `done`. Enforced by
+  discipline (the skills + your `AGENTS.md` bootstrap), since Copilot hooks can't yet
+  veto the close.
 - **Subagent model routing** — Copilot CLI subagents (`task` tool) take an
   `agent_type` and an optional `model`. The routing config below tells the
-  `subagent-driven-development` skill which model tier to request per task.
+  `subagent-driven-development` skill which model tier to request per task (advisory).
 
 ## Ground rules
 
@@ -59,10 +61,11 @@ advisory. Absent file → every subagent inherits the session model.
 
 ## Flow 2 — User-gate enforcement (optional)
 
-If yes, there is nothing to register (no runtime hooks). Confirm to the user that the
-`checking-gates`/`specifying-gates` discipline is active via the skills and the
-`AGENTS.md` bootstrap, and that the `writing-plans` skill will tag user-requested
-verification tasks with `"userGate": true`.
+If yes, confirm to the user that the `checking-gates`/`specifying-gates` discipline is
+active via the skills and the `AGENTS.md` bootstrap, that `writing-plans` tags
+user-requested verification tasks with `"userGate": true`, and that the git
+`pre-commit` task gate (installed by `scripts/init-superpowers.sh`) already blocks
+commits while tasks are unfinished.
 
 ## Flow 3 — Commit strategy (optional)
 

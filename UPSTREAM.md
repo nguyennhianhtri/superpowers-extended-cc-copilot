@@ -28,7 +28,7 @@ re-syncing with upstream stays mechanical.
 | `EnterPlanMode` / `ExitPlanMode` | none — write the plan to a file, pause for review |
 | `Task` subagent / `subagent_type` | `task` tool with `agent_type` (`general-purpose` / `explore`); `read_agent` / `list_agents` |
 | `WebFetch` / `WebSearch` | `web_fetch` |
-| Hooks via `.claude/settings.json` | `hooks/hooks.json` (does not fire yet — see below) |
+| Hooks via `.claude/settings.json` | git `pre-commit` hook for the task gate; `AGENTS.md` for discipline. (Copilot CLI hooks at `.github/hooks/**/*.json` fire but don't consume `additionalContext`/`deny` in build 0.0.367 — see "Copilot CLI hooks" below.) |
 | `~/.claude/` paths | `~/.copilot/` paths |
 | `CLAUDE.md` | `AGENTS.md` / `.github/copilot-instructions.md` |
 | "Claude Code" / "Claude" runtime | "Copilot CLI" / "Copilot" |
@@ -43,28 +43,43 @@ re-syncing with upstream stays mechanical.
   Copilot-CLI rows in `references/copilot-tools.md`; `<!-- copilot-cli adaptation -->`
   notes in `writing-plans`, `executing-plans`, `subagent-driven-development`,
   `brainstorming`, `dispatching-parallel-agents`, `checking-gates`,
-  `specifying-gates`, and `shared/task-format-reference.md`.
+  `specifying-gates`, and `shared/task-format-reference.md`; `hooks/pre-commit` (the
+  git task gate).
 - **Rewrote**: `using-superpowers` "How to Access Skills" / "Platform Adaptation"
   for Copilot-CLI-primary; `commands/*` to invoke skills via the `skill` tool;
-  `commands/onboard.md` for the no-runtime-hooks reality; `hooks/hooks.json` and
-  `scripts/init-superpowers.sh` for Copilot CLI.
+  `scripts/init-superpowers.sh` to write the `AGENTS.md` bootstrap **and** install the
+  git pre-commit gate.
 
-## Platform gaps (Copilot CLI v1.0.55)
+## Copilot CLI hooks (verified against build 0.0.367)
 
-Two documented Copilot CLI surfaces do not yet affect runtime behavior, verified
-empirically by the prior port
-([`jonathan-aulson/superpowers-copilot-cli`](https://github.com/jonathan-aulson/superpowers-copilot-cli)):
+Copilot CLI runs lifecycle hooks loaded from `<git-root>/.github/hooks/**/*.json`:
 
-1. **Plugin hooks don't fire.** `hooks/hooks.json` is shipped and ready, but no event
-   currently executes it. Workaround: `scripts/init-superpowers.sh` writes the
-   sessionStart bootstrap into the repo's `AGENTS.md`.
-2. **`COPILOT_CUSTOM_INSTRUCTIONS_DIRS` doesn't inject content.** It registers a path
-   but doesn't load the file body. The repo-local `AGENTS.md` (git root or cwd) is the
-   only auto-injected instructions surface today.
+```json
+{ "version": 1, "hooks": { "preToolUse": [ { "type": "command", "bash": "…", "timeoutSec": 15 } ] } }
+```
 
-When either gap closes upstream, the shipped `hooks/hooks.json` activates automatic
-enforcement (pre-commit gate, user-gate re-validation, model routing) with no other
-change.
+Events: `sessionStart`, `userPromptSubmitted`, `preToolUse`, `postToolUse`,
+`sessionEnd`, `errorOccurred`. A command hook gets the event as JSON on stdin and may
+print a JSON decision on stdout. **Verified by experiment** that hooks fire (a
+sessionStart side-effect ran; a preToolUse hook saw the `bash` `git commit` args).
+
+**Limitation in this build:** the runtime only consumes `userPromptSubmitted.modifiedPrompt`,
+`preToolUse.modifiedArgs`, and `postToolUse.modifiedResult`. It does **not** consume
+`sessionStart.additionalContext` or `preToolUse.permissionDecision` (`deny`) — those
+appear in the schema/SDK but are never read by the bundled runtime. Therefore a Copilot
+hook can neither inject session context nor block a tool call yet.
+
+Consequences for this port:
+- **Skills discipline** is injected via the auto-loaded repo-root `AGENTS.md`
+  (`scripts/init-superpowers.sh` writes it), not a sessionStart hook.
+- **Pre-commit task gate** is a real **git** `pre-commit` hook (`hooks/pre-commit`,
+  installed by the init script) — git enforces it regardless of Copilot.
+- **`COPILOT_CUSTOM_INSTRUCTIONS_DIRS`** registers a path but doesn't load the file
+  body, so the repo-local `AGENTS.md` remains the only auto-injected instructions
+  surface.
+
+If a later build starts consuming `additionalContext`/`permissionDecision`, the
+discipline and gate can additionally move into native `.github/hooks/` configs.
 
 ## Re-syncing with upstream
 

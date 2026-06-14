@@ -17,4 +17,7 @@ dependencies aren't `done`. See using-superpowers/references/task-management.md.
 
 User gates: before marking any task `done` whose description contains
 `"userGate": true`, invoke the `checking-gates` skill. Do not invent a cheaper check.
+
+Commit gate: a git pre-commit hook blocks `git commit` while any `.tasks.json` in this
+repo has unfinished tasks. Finish/cancel them first (or `git commit --no-verify`).
 <!-- END superpowers-extended-cc-copilot bootstrap -->

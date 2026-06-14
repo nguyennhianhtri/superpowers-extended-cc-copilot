@@ -13,11 +13,15 @@ own primitives.
 > **TL;DR on parity:** every *skill* ports cleanly and is auto-discovered by Copilot
 > CLI. Native task management maps **1:1** onto Copilot CLI's `sql` `todos` +
 > `todo_deps` tables (real dependency enforcement — the headline Extended-CC
-> feature). The Extended-CC features that were implemented as **Claude Code hooks**
-> (pre-commit gate, automatic user-gate re-validation, model-routing enforcement)
-> cannot fire automatically because **Copilot CLI does not execute plugin hooks at
-> runtime yet** — so they are re-expressed as *skill discipline* + a per-repo
-> `AGENTS.md` bootstrap. See [Feature parity](#feature-parity).
+> feature). The Extended-CC features that upstream implemented as **Claude Code hooks**
+> are reproduced two ways: the **pre-commit task gate** ships as a real **git
+> pre-commit hook** (git enforces it on every commit — fully working), and the
+> **skills discipline** is injected via the auto-loaded repo-root **`AGENTS.md`**.
+> Copilot CLI *does* run its own lifecycle hooks (verified), but in the current build
+> (0.0.367) the runtime only honors a hook's `modifiedPrompt`/`modifiedArgs` outputs —
+> not `additionalContext` or a `deny` decision — so a Copilot hook can't inject context
+> or block a commit; the git hook + `AGENTS.md` are the reliable surfaces.
+> See [Feature parity](#feature-parity).
 
 ## Quick start
 
@@ -30,17 +34,16 @@ copilot plugin install /path/to/superpowers-extended-cc-copilot
 # 2. Verify
 copilot plugin list
 
-# 3. (Optional, per repo) auto-load the "check for a skill first" discipline.
+# 3. (Recommended, per repo) install the AGENTS.md discipline + git pre-commit gate.
 #    Run the init script from your clone of this repo:
 cd /path/to/your/project
 /path/to/superpowers-extended-cc-copilot/scripts/init-superpowers.sh
 ```
 
 Plugins install at the **user level**, so there is no per-project install — once
-installed, the skills are available everywhere. The only per-project step is the
-optional `AGENTS.md` bootstrap in step 3, which makes the session-start discipline
-auto-load in that repo (needed because Copilot CLI doesn't fire plugin hooks yet —
-see [Feature parity](#feature-parity)).
+installed, the skills are available everywhere. The per-project step 3 writes the
+skills discipline into the repo's auto-loaded `AGENTS.md` and installs a git
+pre-commit task gate (see [Feature parity](#feature-parity)).
 
 > **Visibility:** while this repo is **private**, only accounts you've granted read
 > access can `copilot plugin install` it. Make it **public** and anyone can install it
@@ -129,38 +132,50 @@ Tool-name mapping: [`skills/using-superpowers/references/copilot-tools.md`](skil
 | Upstream (Extended-CC) feature | Status on Copilot CLI | How |
 |---|---|---|
 | 16 workflow skills | ✅ Full | Ported verbatim (behavior-shaping content preserved); auto-discovered via `description`. |
-| Skill-first discipline ("check for a skill before responding") | ✅ Full | `using-superpowers` skill + `AGENTS.md` bootstrap (`scripts/init-superpowers.sh`) + `hooks/hooks.json` sessionStart prompt (for when hooks land). |
+| Skill-first discipline ("check for a skill before responding") | ✅ Full | `using-superpowers` skill + the auto-loaded repo-root `AGENTS.md` bootstrap (`scripts/init-superpowers.sh`). |
 | Native task management | ✅ Full (re-mapped) | `sql` on `todos`; `TaskGet`/`Update`/`List` → `SELECT`/`UPDATE`. |
 | Dependency tracking / no front-running | ✅ Full (re-mapped) | `todo_deps` + the ready query (LEFT JOIN: corrupt edges block, not pass). |
 | Structured task metadata (`json:metadata`) | ✅ Full (re-mapped) | Embedded in `todos.description`; schema unchanged. |
 | Cross-session resume | ✅ Full (re-mapped) | On-disk `.tasks.json` (written by `writing-plans`) is the durable source of truth; a new session re-hydrates the session `todos` tables from it. |
-| User-thrown gate flow (`checking-gates`/`specifying-gates`) | ✅ Skills full; ⚠️ enforcement manual | Skills ported. Auto re-validation hook can't fire → enforced by discipline: invoke `checking-gates` before closing any `"userGate": true` task. |
-| Pre-commit task gate (block `git commit` with open tasks) | ⚠️ Discipline-only | No commit hook fires on Copilot CLI. `executing-plans` / `onboard` instruct: check `SELECT … WHERE status NOT IN ('done')` before committing. |
-| Subagent model routing (`mechanical`/`standard`/`frontier`) | ➖ Scaffolding only | `onboard` writes `model-routing.json` and the `modelTier` metadata key is preserved, but **nothing auto-enforces it** (no routing hook). Advisory: pass the mapped `model` to the `task` tool by hand. |
-| Configurable commit strategy (`per-task`/`per-plan`) | ➖ Scaffolding only | `onboard` writes `workflow.json` and execution skills can honor it on a best-effort basis, but there's no enforcing hook. |
+| User-thrown gate flow (`checking-gates`/`specifying-gates`) | ✅ Skills full; ⚠️ enforcement manual | Skills ported. Copilot hooks can't `deny` a tool (see below), so closing a gate is enforced by discipline: invoke `checking-gates` before closing any `"userGate": true` task. |
+| Pre-commit task gate (block `git commit` with open tasks) | ✅ Full | A real **git pre-commit hook** (`scripts/init-superpowers.sh` installs `hooks/pre-commit` into `.git/hooks/`) blocks `git commit` while any `.tasks.json` has unfinished tasks. Works for every commit, agent or human. Bypass: `git commit --no-verify`. |
+| Subagent model routing (`mechanical`/`standard`/`frontier`) | ➖ Scaffolding only | `onboard` writes `model-routing.json` and the `modelTier` metadata key is preserved, but nothing auto-enforces it. Advisory: pass the mapped `model` to the `task` tool by hand. |
+| Configurable commit strategy (`per-task`/`per-plan`) | ➖ Scaffolding only | `onboard` writes `workflow.json`; execution skills honor it best-effort. |
 | `EnterPlanMode`/`ExitPlanMode` | ➖ N/A | No equivalent; skills write the plan to a file and pause for review. |
 
-Legend: ✅ full parity · ⚠️ available but enforced by discipline rather than an
-automatic hook · ➖ not applicable, or config scaffolding present but not
-auto-enforced (no hook to honor it yet).
+Legend: ✅ full parity · ⚠️ available but enforced by discipline · ➖ not applicable,
+or config scaffolding present but not auto-enforced.
 
-### Why the hook-based features are discipline-only
+### About Copilot CLI hooks (the accurate story)
 
-Copilot CLI's config schema documents a `hooks` system (`sessionStart`,
-`userPromptSubmitted`, `preToolUse`, `postToolUse`, `agentStop`) and a
-`COPILOT_CUSTOM_INSTRUCTIONS_DIRS` env var, but **as of CLI v1.0.55 neither injects
-behavior at runtime** — empirically verified by the upstream Copilot-CLI port author
-([`jonathan-aulson/superpowers-copilot-cli`](https://github.com/jonathan-aulson/superpowers-copilot-cli),
-token-count diffs). The only auto-loaded instructions surface that actually reaches
-the model is the repo-local `AGENTS.md`. This port therefore ships:
+Copilot CLI **does** run lifecycle hooks — verified directly against the installed
+runtime (build `0.0.367`). Hook configs load from `<git-root>/.github/hooks/**/*.json`
+with this shape:
 
-1. `hooks/hooks.json` — the sessionStart bootstrap, ready for when hooks start firing.
-2. `scripts/init-superpowers.sh` — writes the same bootstrap into the repo's
-   `AGENTS.md` so it works **today**.
-3. The discipline baked into the skills themselves.
+```json
+{ "version": 1, "hooks": { "preToolUse": [ { "type": "command", "bash": "…", "timeoutSec": 15 } ] } }
+```
 
-When Copilot CLI begins honoring hooks, the same `hooks.json` activates automatic
-enforcement with no other change.
+Events: `sessionStart`, `userPromptSubmitted`, `preToolUse`, `postToolUse`,
+`sessionEnd`, `errorOccurred`. Each command hook receives the event as JSON on
+**stdin** and may return a JSON decision on **stdout**. Confirmed by experiment
+(sessionStart side-effect fired; preToolUse received the `bash` tool's `git commit`
+args).
+
+**The catch in this build:** the runtime only consumes a *subset* of each hook's
+declared output — `userPromptSubmitted.modifiedPrompt`, `preToolUse.modifiedArgs`,
+and `postToolUse.modifiedResult`. It does **not** currently consume
+`sessionStart.additionalContext` or `preToolUse.permissionDecision` (`"deny"`). So a
+Copilot hook cannot inject session context or veto a tool call yet. That's why this
+port uses the two surfaces that *are* reliable:
+
+1. **`AGENTS.md`** (auto-loaded from the repo root) for the skills discipline — the
+   `using-superpowers` content is written there by `scripts/init-superpowers.sh`.
+2. **A real git `pre-commit` hook** for the task gate — git enforces it unconditionally,
+   so it doesn't depend on Copilot honoring `deny`.
+
+If a future Copilot CLI build starts consuming `additionalContext`/`permissionDecision`,
+these features can additionally move into native `.github/hooks/` configs.
 
 ## Credits
 
